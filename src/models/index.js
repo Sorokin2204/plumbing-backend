@@ -5,10 +5,10 @@ const setupRelationship = require('../setupRelationship');
 require('dotenv').config();
 
 const config = {
-  host: 'localhost',
-  user: 'root',
-  pass: 'root',
-  dbName: 'plumbing_db',
+  host: process.env.MYSQL_HOST,
+  user: process.env.MYSQL_USER,
+  pass: process.env.MYSQL_PASS,
+  dbName: process.env.MYSQL_DB,
 };
 
 const sequelize = new Sequelize(config.dbName, config.user, config.pass, {
