@@ -33,7 +33,12 @@ module.exports = (sequelize, Sequelize) => {
       defaultValue: null,
     },
     homeList: {
-      type: Sequelize.STRING,
+      type: Sequelize.TEXT('long'),
+      allowNull: true,
+      defaultValue: null,
+    },
+    newsDesc: {
+      type: Sequelize.TEXT('long'),
       allowNull: true,
       defaultValue: null,
     },

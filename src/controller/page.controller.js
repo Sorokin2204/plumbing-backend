@@ -5,6 +5,8 @@ const { CustomError, TypeError } = require('../models/customError.model');
 const moment = require('moment/moment');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const mailService = require('../services/mail-service');
+const { currencyFormat } = require('../utils/currencyFormat');
 const Page = db.page;
 const PageContent = db.pageContent;
 const PageContentToPage = db.pageContentToPage;
@@ -54,7 +56,7 @@ class PageController {
   }
   async login(req, res) {
     const { login, password } = req.body;
-    console.log(req.body);
+
     const passCheck = await bcrypt.compare(password, process.env.ADMIN_PASSWORD);
     const loginCheck = await bcrypt.compare(login, process.env.ADMIN_LOGIN);
     if (!passCheck || !loginCheck) {
@@ -65,19 +67,97 @@ class PageController {
     res.json({ token });
   }
 
+  async searchPages(req, res) {
+    const { search } = req.query;
+    const findPages = await Page.findAll({
+      where: {
+        active: true,
+        name: { [Op.like]: `%${search}%` },
+      },
+    });
+    res.json(findPages);
+  }
+  async sendFormToEmail(req, res) {
+    const { type, name, address, email, text, phone, services } = req.body;
+    let dataMail;
+    if (type === 'feedback') {
+      dataMail = {
+        title: 'Интернет прёмная',
+        text: `
+      <div style='color:#000'>
+      <p>Ф.И.О: ${name}</p>
+      <p>Адрес: ${address}</p>
+      <p>Телефон: ${phone}</p>
+      <p>Email: ${email}</p>
+      <p>Текст письма: ${text}</p>
+      </div>
+      `,
+      };
+    } else if (type === 'checkout') {
+      dataMail = {
+        title: 'Оформление услуг',
+        text: `
+      <div style='color:#000'>
+      <p><b>Услуги</b>:</p>
+      ${services
+        ?.map((itemService) => `<p>${itemService?.label}</p>`)
+        .toString()
+        .replaceAll(',', '')}
+      <p>Ф.И.О: ${name}</p>
+      <p>Адрес: ${address}</p>
+      <p>Телефон: ${phone}</p>
+      <p>Сумма: ${currencyFormat(services?.reduce((partialSum, a) => partialSum + a.value, 0))}</p>
+      <p>Текст письма: ${text}</p>
+      </div>
+      `,
+      };
+    }
+
+    await mailService.sendActivationMail(process.env.SMTP_MAIL, dataMail.text, dataMail.title);
+    res.json({ success: true });
+  }
+
+  async getServiceList(req, res) {
+    const findServiceList = await PageContent.findAll({ where: { isServiceTable: true, active: true } });
+    const result = findServiceList?.map((itemServiceTable) => {
+      const tableParse = JSON.parse(itemServiceTable?.data);
+      return { id: itemServiceTable?.id, data: tableParse.data };
+    });
+    res.json(result);
+  }
+
+  async getPageForms(req, res) {
+    const findPageFormPay = await Page.findOne({ where: { type: 'page', active: true, isFormPay: true } });
+    const findPageFormCheckout = await Page.findOne({
+      where: {
+        type: 'page',
+        active: true,
+        isFormCheckout: true,
+      },
+    });
+    const findPageFormFeedback = await Page.findOne({ where: { type: 'page', active: true, isFormFeedback: true } });
+    res.json({
+      pageFormPay: findPageFormPay,
+      pageFormCheckout: findPageFormCheckout,
+      pageFormFeedback: findPageFormFeedback,
+    });
+  }
   async getPages(req, res) {
-    const { type } = req.query;
+    const { type, isBreakingNews } = req.query;
     const findPages = await Page.findAll({
       where: {
         type,
         active: true,
+        ...(isBreakingNews && { newsIsBreaking: true }),
       },
+
+      ...(isBreakingNews && { limit: 3 }),
+      order: [['newsDate', 'DESC']],
     });
     res.json(findPages);
   }
   async getPageSingle(req, res) {
     const { type, slug } = req.query;
-    console.log(req.query);
     let findPageSingle = await Page.findOne({
       where: {
         type,
@@ -206,7 +286,7 @@ async function createTabSingleContentDto({ id, type, order, data, tabId, active 
 }
 
 async function editorContentDto({ type, order, value, tabId, pageContentId, deleted }) {
-  const [upsertEditor, created] = await PageContent.upsert({ id: pageContentId, type, order, data: value, tabId, active: !!!deleted });
+  const [upsertEditor, created] = await PageContent.upsert({ id: pageContentId, type, order, data: value.replaceAll('<p><br></p>', ''), tabId, active: !!!deleted });
   return upsertEditor.id;
 }
 async function filesContentDto({ type, order, value, tabId, pageContentId, deleted }) {
@@ -214,18 +294,23 @@ async function filesContentDto({ type, order, value, tabId, pageContentId, delet
   return upsertFiles.id;
 }
 async function tableContentDto({ type, order, value, tabId, pageContentId, deleted }) {
-  const [upsertTable, created] = await PageContent.upsert({ id: pageContentId, type, order, data: JSON.stringify(value), isServiceTable: value?.isServiceTable, tabId, active: !!!deleted });
+  const [upsertTable, created] = await PageContent.upsert({ id: pageContentId, type, order, data: JSON.stringify(value).replaceAll('<p><br></p>', ''), isServiceTable: value?.isServiceTable, tabId, active: !!!deleted });
   return upsertTable.id;
 }
 function formatPage(pageData) {
   let formatedPageData = {
+    newsDesc: pageData?.newsDesc,
     map: pageData?.homeMap ? JSON.parse(pageData?.homeMap) : null,
     list: pageData?.homeList ? JSON.parse(pageData?.homeList) : null,
     name: pageData.name,
     slug: pageData.slug,
     pageId: pageData.id,
     isBreakingNews: pageData.newsIsBreaking,
+    isFormPay: pageData?.isFormPay,
+    isFormCheckout: pageData?.isFormCheckout,
+    isFormFeedback: pageData?.isFormFeedback,
     dateNews: moment(pageData.newsDate).format('YYYY-MM-DD'),
+    type: pageData?.type,
   };
   formatedPageData.pageContent = pageData?.pageContents?.map((childItem) => {
     return formatPageContent(childItem);
@@ -262,8 +347,8 @@ function formatPageContent(pageContent) {
 
   return formatedPageContent;
 }
-async function createPage({ name, slug, type, dateNews, isBreakingNews, pageId, list, map }) {
-  const [upsertPage, created] = await Page.upsert({ id: pageId, name, slug, type, newsIsBreaking: isBreakingNews, homeMap: map ? JSON.stringify(map) : null, homeList: list ? JSON.stringify(list) : null, newsDate: dateNews });
+async function createPage({ name, slug, type, dateNews, isBreakingNews, pageId, list, map, newsDesc }) {
+  const [upsertPage, created] = await Page.upsert({ newsDesc, id: pageId, name, slug, type, newsIsBreaking: isBreakingNews, homeMap: map ? JSON.stringify(map) : null, homeList: list ? JSON.stringify(list) : null, newsDate: dateNews });
   return upsertPage.id;
 }
 module.exports = new PageController();
