@@ -22,6 +22,11 @@ module.exports = (sequelize, Sequelize) => {
       allowNull: false,
       defaultValue: false,
     },
+    newsIsDocs: {
+      type: Sequelize.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
     newsDate: {
       type: Sequelize.DATE,
       allowNull: true,

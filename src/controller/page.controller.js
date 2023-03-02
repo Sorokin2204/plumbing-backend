@@ -143,15 +143,16 @@ class PageController {
     });
   }
   async getPages(req, res) {
-    const { type, isBreakingNews } = req.query;
+    const { type, isBreakingNews, isDocsNews, limit } = req.query;
     const findPages = await Page.findAll({
       where: {
         type,
         active: true,
         ...(isBreakingNews && { newsIsBreaking: true }),
+        ...(isDocsNews && { newsIsDocs: true }),
       },
 
-      ...(isBreakingNews && { limit: 3 }),
+      ...((isBreakingNews || isDocsNews || limit) && { limit: 3 }),
       order: [['newsDate', 'DESC']],
     });
     res.json(findPages);
@@ -306,6 +307,7 @@ function formatPage(pageData) {
     slug: pageData.slug,
     pageId: pageData.id,
     isBreakingNews: pageData.newsIsBreaking,
+    isDocsNews: pageData.newsIsDocs,
     isFormPay: pageData?.isFormPay,
     isFormCheckout: pageData?.isFormCheckout,
     isFormFeedback: pageData?.isFormFeedback,
@@ -347,8 +349,8 @@ function formatPageContent(pageContent) {
 
   return formatedPageContent;
 }
-async function createPage({ name, slug, type, dateNews, isBreakingNews, pageId, list, map, newsDesc }) {
-  const [upsertPage, created] = await Page.upsert({ newsDesc, id: pageId, name, slug, type, newsIsBreaking: isBreakingNews, homeMap: map ? JSON.stringify(map) : null, homeList: list ? JSON.stringify(list) : null, newsDate: dateNews });
+async function createPage({ name, slug, type, dateNews, isBreakingNews, pageId, list, map, newsDesc, isDocsNews }) {
+  const [upsertPage, created] = await Page.upsert({ newsDesc, id: pageId, name, slug, type, newsIsBreaking: isBreakingNews, newsIsDocs: isDocsNews, homeMap: map ? JSON.stringify(map) : null, homeList: list ? JSON.stringify(list) : null, newsDate: dateNews });
   return upsertPage.id;
 }
 module.exports = new PageController();
