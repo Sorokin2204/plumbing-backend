@@ -15,6 +15,7 @@ router.post('/page/delete', errorWrapper(pageController.deletePage));
 router.post('/login', errorWrapper(pageController.login));
 router.get('/verify', errorWrapper(pageController.verify));
 router.get('/search', errorWrapper(pageController.searchPages));
+router.post('/payment', errorWrapper(pageController.createPayment));
 router.get('/service-list', errorWrapper(pageController.getServiceList));
 
 module.exports = router;

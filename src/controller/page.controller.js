@@ -7,11 +7,17 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const mailService = require('../services/mail-service');
 const { currencyFormat } = require('../utils/currencyFormat');
+const { default: axios } = require('axios');
 const Page = db.page;
 const PageContent = db.pageContent;
 const PageContentToPage = db.pageContentToPage;
 
 class PageController {
+  async createPayment(req, res) {
+    console.log(req.body);
+    res.json();
+  }
+
   async uploadFile(req, res) {
     if (!req.files) {
       res.send({
@@ -78,8 +84,9 @@ class PageController {
     res.json(findPages);
   }
   async sendFormToEmail(req, res) {
-    const { type, name, address, email, text, phone, services } = req.body;
+    const { type, name, address, email, text, phone, services, docNumber } = req.body;
     let dataMail;
+    let paymentUrl;
     if (type === 'feedback') {
       dataMail = {
         title: 'Интернет прёмная',
@@ -111,10 +118,56 @@ class PageController {
       </div>
       `,
       };
+    } else if (type === 'payment') {
+      const t = Buffer.from(`${process.env.SHOP_ID}:${process.env.SECRET_KEY}`, 'utf8').toString('base64');
+      const responsePayment = await axios.post(
+        'https://api.yookassa.ru/v3/payments',
+        {
+          amount: {
+            value: parseInt(services?.reduce((partialSum, a) => partialSum + a.value, 0)).toString(),
+            currency: 'RUB',
+          },
+          confirmation: {
+            type: 'redirect',
+            return_url: 'https://5-углов.рф/',
+          },
+          capture: true,
+          description: `Оплата услуг 5-углов - ${currencyFormat(services?.reduce((partialSum, a) => partialSum + a.value, 0))}`,
+          test: true,
+        },
+        {
+          headers: {
+            Authorization: `Basic ${t}`,
+            'Content-Type': 'application/json',
+            'Idempotence-Key': Date.now(),
+          },
+        },
+      );
+
+      if (responsePayment.data?.confirmation?.confirmation_url) {
+        paymentUrl = responsePayment.data?.confirmation?.confirmation_url;
+      }
+      dataMail = {
+        title: 'Оплата услуг',
+        text: `
+      <div style='color:#000'>
+      <p><b>Услуги</b>:</p>
+      ${services
+        ?.map((itemService) => `<p>${itemService?.label}</p>`)
+        .toString()
+        .replaceAll(',', '')}
+      <p><b>Ф.И.О:</b> ${name}</p>
+      <p><b>Номер договора:</b> ${docNumber}</p>
+      <p><b>Адрес:</b> ${address}</p>
+      <p><b>Телефон:</b> ${phone}</p>
+      <p><b>Сумма:</b> ${currencyFormat(services?.reduce((partialSum, a) => partialSum + a.value, 0))}</p>
+      </div>
+      `,
+      };
     }
 
     await mailService.sendActivationMail(process.env.SMTP_MAIL, dataMail.text, dataMail.title);
-    res.json({ success: true });
+    res.json({ success: true, ...(paymentUrl && { paymentUrl }) });
   }
 
   async getServiceList(req, res) {
