@@ -8,6 +8,7 @@ const bcrypt = require('bcrypt');
 const mailService = require('../services/mail-service');
 const { currencyFormat } = require('../utils/currencyFormat');
 const { default: axios } = require('axios');
+const makeId = require('../utils/makeId');
 const Page = db.page;
 const PageContent = db.pageContent;
 const PageContentToPage = db.pageContentToPage;
@@ -119,6 +120,7 @@ class PageController {
       `,
       };
     } else if (type === 'payment') {
+      const orderId = makeId(5);
       const t = Buffer.from(`${process.env.SHOP_ID}:${process.env.SECRET_KEY}`, 'utf8').toString('base64');
       const responsePayment = await axios.post(
         'https://api.yookassa.ru/v3/payments',
@@ -132,8 +134,7 @@ class PageController {
             return_url: 'https://5-углов.рф/',
           },
           capture: true,
-          description: `Оплата услуг 5-углов - ${currencyFormat(services?.reduce((partialSum, a) => partialSum + a.value, 0))}`,
-          test: true,
+          description: `Заказ #${orderId}. Оплата услуг 5-углов - ${currencyFormat(services?.reduce((partialSum, a) => partialSum + a.value, 0))}`,
         },
         {
           headers: {
@@ -148,7 +149,7 @@ class PageController {
         paymentUrl = responsePayment.data?.confirmation?.confirmation_url;
       }
       dataMail = {
-        title: 'Оплата услуг',
+        title: `Заказ #${orderId} - Оплата услуг `,
         text: `
       <div style='color:#000'>
       <p><b>Услуги</b>:</p>
@@ -157,7 +158,6 @@ class PageController {
         .toString()
         .replaceAll(',', '')}
       <p><b>Ф.И.О:</b> ${name}</p>
-      <p><b>Номер договора:</b> ${docNumber}</p>
       <p><b>Адрес:</b> ${address}</p>
       <p><b>Телефон:</b> ${phone}</p>
       <p><b>Сумма:</b> ${currencyFormat(services?.reduce((partialSum, a) => partialSum + a.value, 0))}</p>
