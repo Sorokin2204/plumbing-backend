@@ -196,13 +196,14 @@ class PageController {
     });
   }
   async getPages(req, res) {
-    const { type, isBreakingNews, isDocsNews, limit } = req.query;
+    const { type, isBreakingNews, isDocsNews, limit, isHome } = req.query;
     const findPages = await Page.findAll({
       where: {
         type,
         active: true,
         ...(isBreakingNews && { newsIsBreaking: true }),
         ...(isDocsNews && { newsIsDocs: true }),
+        ...(isHome && { newsIsBreaking: false }),
       },
 
       ...((isBreakingNews || isDocsNews || limit) && { limit: 3 }),
