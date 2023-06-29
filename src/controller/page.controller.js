@@ -203,7 +203,7 @@ class PageController {
         active: true,
         ...(isBreakingNews && { newsIsBreaking: true }),
         ...(isDocsNews && { newsIsDocs: true }),
-        ...(isHome && { newsIsBreaking: false }),
+        ...(isHome && { newsIsBreaking: false, newsIsDocs: false }),
       },
 
       ...((isBreakingNews || isDocsNews || limit) && { limit: 3 }),
